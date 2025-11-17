@@ -1,16 +1,16 @@
 ---
-- name: Add Azure Cloud Credentials to AWX
+- name: Add Azure Cloud Credentials to AWX (Token Authentication)
   hosts: localhost
   connection: local
   gather_facts: no
-  
+
   vars:
     awx_host: "http://localhost:8052"
-    awx_username: "admin"
-    awx_password: "admin"
+    awx_token: "dLzd4hXxJ7iOcdpkU0hZKK1ZN6reR0"
     credential_name: "Azure_{{ organization }}_{{ Name[:8] }}"
 
   tasks:
+
     - name: Display input parameters
       debug:
         msg:
@@ -23,9 +23,8 @@
       uri:
         url: "{{ awx_host }}/api/v2/organizations/?name={{ organization }}"
         method: GET
-        user: "{{ awx_username }}"
-        password: "{{ awx_password }}"
-        force_basic_auth: yes
+        headers:
+          Authorization: "Bearer {{ awx_token }}"
         validate_certs: no
         return_content: yes
       register: org_response
@@ -44,9 +43,8 @@
       uri:
         url: "{{ awx_host }}/api/v2/credential_types/?name=Microsoft Azure Resource Manager"
         method: GET
-        user: "{{ awx_username }}"
-        password: "{{ awx_password }}"
-        force_basic_auth: yes
+        headers:
+          Authorization: "Bearer {{ awx_token }}"
         validate_certs: no
         return_content: yes
       register: cred_type_response
@@ -60,9 +58,8 @@
       uri:
         url: "{{ awx_host }}/api/v2/credentials/?name={{ credential_name }}"
         method: GET
-        user: "{{ awx_username }}"
-        password: "{{ awx_password }}"
-        force_basic_auth: yes
+        headers:
+          Authorization: "Bearer {{ awx_token }}"
         validate_certs: no
         return_content: yes
       register: existing_cred
@@ -71,9 +68,9 @@
       uri:
         url: "{{ awx_host }}/api/v2/credentials/"
         method: POST
-        user: "{{ awx_username }}"
-        password: "{{ awx_password }}"
-        force_basic_auth: yes
+        headers:
+          Authorization: "Bearer {{ awx_token }}"
+          Content-Type: "application/json"
         body_format: json
         validate_certs: no
         status_code: [200, 201]
@@ -94,9 +91,9 @@
       uri:
         url: "{{ awx_host }}/api/v2/credentials/{{ existing_cred.json.results[0].id }}/"
         method: PATCH
-        user: "{{ awx_username }}"
-        password: "{{ awx_password }}"
-        force_basic_auth: yes
+        headers:
+          Authorization: "Bearer {{ awx_token }}"
+          Content-Type: "application/json"
         body_format: json
         validate_certs: no
         status_code: [200, 201]
@@ -112,7 +109,7 @@
 
     - name: Display success message
       debug:
-        msg: 
+        msg:
           - "✓ Azure cloud credentials added successfully!"
           - "Organization: {{ organization }}"
           - "Credential Name: {{ credential_name }}"
