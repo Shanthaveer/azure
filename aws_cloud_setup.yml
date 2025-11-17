@@ -1,0 +1,74 @@
+---
+# aws_cloud_setup.yml
+# This playbook adds AWS cloud credentials to AWX
+
+- name: Add AWS Cloud Credentials to AWX
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  vars:
+    awx_host: "{{ lookup('env', 'TOWER_HOST') | default('http://localhost:8052', true) }}"
+    awx_username: "{{ lookup('env', 'TOWER_USERNAME') | default('admin', true) }}"
+    awx_password: "{{ lookup('env', 'TOWER_PASSWORD') | default('admin', true) }}"
+    validate_certs: false
+
+  tasks:
+    - name: Display input parameters
+      debug:
+        msg:
+          - "Account Name: {{ account_name }}"
+          - "Access Key: {{ access_key[:10] }}..."
+          - "Organization: {{ organization }}"
+
+    - name: Create AWS Credential in AWX
+      awx.awx.credential:
+        name: "AWS_{{ organization }}_{{ account_name }}"
+        description: "AWS credential for {{ organization }}"
+        organization: "{{ organization }}"
+        credential_type: "Amazon Web Services"
+        tower_host: "{{ awx_host }}"
+        tower_username: "{{ awx_username }}"
+        tower_password: "{{ awx_password }}"
+        validate_certs: "{{ validate_certs }}"
+        inputs:
+          username: "{{ access_key }}"
+          password: "{{ secret_key }}"
+        state: present
+      register: aws_credential
+
+    - name: Display credential creation result
+      debug:
+        msg: "AWS credential created successfully with ID: {{ aws_credential.id }}"
+      when: aws_credential is defined and aws_credential.id is defined
+
+    - name: Create AWS inventory source (optional)
+      awx.awx.inventory_source:
+        name: "AWS_{{ organization }}_Inventory"
+        description: "Auto-sync AWS EC2 instances for {{ organization }}"
+        inventory: "{{ organization }}"
+        source: "ec2"
+        credential: "AWS_{{ organization }}_{{ account_name }}"
+        tower_host: "{{ awx_host }}"
+        tower_username: "{{ awx_username }}"
+        tower_password: "{{ awx_password }}"
+        validate_certs: "{{ validate_certs }}"
+        update_on_launch: yes
+        overwrite: yes
+        source_vars: |
+          ---
+          regions:
+            - us-east-1
+            - us-west-2
+          filters:
+            instance-state-name: running
+        state: present
+      register: inventory_source
+      ignore_errors: yes
+
+    - name: Success message
+      debug:
+        msg: 
+          - "✓ AWS cloud credentials added successfully!"
+          - "Organization: {{ organization }}"
+          - "Credential Name: AWS_{{ organization }}_{{ account_name }}"
