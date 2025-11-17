@@ -1,7 +1,4 @@
 ---
-# azure_cloud_setup.yml
-# Simplified version using uri module (no awx.awx collection needed)
-
 - name: Add Azure Cloud Credentials to AWX
   hosts: localhost
   connection: local
@@ -20,9 +17,6 @@
           - "Subscription ID: {{ Name }}"
           - "Application ID: {{ description }}"
           - "Organization: {{ organization }}"
-          - "AD Username: {{ subscription }}"
-          - "Client ID: {{ client }}"
-          - "Tenant ID: {{ tenant }}"
           - "Credential Name: {{ credential_name }}"
 
     - name: Get organization ID
