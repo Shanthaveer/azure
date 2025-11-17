@@ -1,0 +1,72 @@
+---
+# azure_cloud_setup.yml
+# This playbook adds Azure cloud credentials to AWX
+
+- name: Add Azure Cloud Credentials to AWX
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  vars:
+    awx_host: "{{ lookup('env', 'TOWER_HOST') | default('http://localhost:8052', true) }}"
+    awx_username: "{{ lookup('env', 'TOWER_USERNAME') | default('admin', true) }}"
+    awx_password: "{{ lookup('env', 'TOWER_PASSWORD') | default('admin', true) }}"
+    validate_certs: false
+
+  tasks:
+    - name: Display input parameters
+      debug:
+        msg:
+          - "Subscription ID: {{ Name }}"
+          - "Application ID: {{ description }}"
+          - "Organization: {{ organization }}"
+          - "AD Username: {{ subscription }}"
+          - "Client ID: {{ client }}"
+          - "Tenant ID: {{ tenant }}"
+
+    - name: Create Azure Credential in AWX
+      awx.awx.credential:
+        name: "Azure_{{ organization }}_{{ Name[:8] }}"
+        description: "Azure credential for {{ organization }}"
+        organization: "{{ organization }}"
+        credential_type: "Microsoft Azure Resource Manager"
+        tower_host: "{{ awx_host }}"
+        tower_username: "{{ awx_username }}"
+        tower_password: "{{ awx_password }}"
+        validate_certs: "{{ validate_certs }}"
+        inputs:
+          subscription: "{{ Name }}"
+          client: "{{ client }}"
+          secret: "{{ secret }}"
+          tenant: "{{ tenant }}"
+        state: present
+      register: azure_credential
+
+    - name: Display credential creation result
+      debug:
+        msg: "Azure credential created successfully with ID: {{ azure_credential.id }}"
+      when: azure_credential is defined and azure_credential.id is defined
+
+    - name: Create Azure inventory source (optional)
+      awx.awx.inventory_source:
+        name: "Azure_{{ organization }}_Inventory"
+        description: "Auto-sync Azure resources for {{ organization }}"
+        inventory: "{{ organization }}"
+        source: "azure_rm"
+        credential: "Azure_{{ organization }}_{{ Name[:8] }}"
+        tower_host: "{{ awx_host }}"
+        tower_username: "{{ awx_username }}"
+        tower_password: "{{ awx_password }}"
+        validate_certs: "{{ validate_certs }}"
+        update_on_launch: yes
+        overwrite: yes
+        state: present
+      register: inventory_source
+      ignore_errors: yes
+
+    - name: Success message
+      debug:
+        msg: 
+          - "✓ Azure cloud credentials added successfully!"
+          - "Organization: {{ organization }}"
+          - "Credential Name: Azure_{{ organization }}_{{ Name[:8] }}"
