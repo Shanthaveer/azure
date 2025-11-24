@@ -5,7 +5,7 @@
   gather_facts: no
 
   vars:
-    awx_host: "http://localhost:8052"
+    awx_host: "http://172.17.0.1:8052"
     awx_token: "dLzd4hXxJ7iOcdpkU0hZKK1ZN6reR0"
     credential_name: "Azure_{{ organization }}_{{ Name[:8] }}"
 
