@@ -8,6 +8,8 @@
     - azure.azcollection
 
   vars:
+    awx_host: "http://172.17.0.1:8052"
+    awx_token: "dLzd4hXxJ7iOcdpkU0hZKK1ZN6reR0"
     azure_credential_name: "Azure_{{ organization }}_{{ Name[:8] }}"
 
   tasks:
@@ -42,13 +44,30 @@
         tenant: "{{ tenant_id }}"
       register: vm_output
 
-    - name: 📂 Save VM Details to JSON File
+    - name: 📂 Save VM Details Locally (debug only)
       copy:
         content: "{{ vm_output | to_nice_json }}"
         dest: "./azure_vm_inventory.json"
 
-    - name: 📣 Print Summary
-      debug:
-        msg:
-          - "VM Count: {{ vm_output.virtualmachines | length }}"
-          - "Output stored at: ./azure_vm_inventory.json"
+    
+    #######################################################
+    ## ⬇⬇⬇ THIS IS WHERE THE API PUSH WAS ADDED ⬇⬇⬇   ##
+    #######################################################
+
+    - name: 🚀 Send VM details to Next.js backend API
+      uri:
+        url: "http://localhost:3000/api/v2/store-vms"   # <--- Update if your Next.js port differs
+        method: POST
+        body: "{{ vm_output.virtualmachines }}"
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+      register: push_response
+
+    - debug:
+        msg: "📡 VM data sent to backend successfully — Response Code: {{ push_response.status }}"
+
+
+    ########################################################
+    ## ⬆⬆⬆ API PUSH SECTION ENDS HERE ⬆⬆⬆            ##
+    ########################################################
