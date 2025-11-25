@@ -1,4 +1,16 @@
-- name: Check python version
-  shell: python3 --version
-  environment:
-    PATH: "/usr/local/bin:/usr/bin:/bin"
+---
+- name: Test Python in AWX
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  tasks:
+    - name: Check python version
+      shell: python3 --version
+      environment:
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      register: py_version
+
+    - name: Show python version
+      debug:
+        var: py_version.stdout
