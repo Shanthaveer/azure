@@ -1,0 +1,54 @@
+---
+- name: Fetch Azure VM Inventory Details
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  collections:
+    - azure.azcollection
+
+  vars:
+    azure_credential_name: "Azure_{{ organization }}_{{ Name[:8] }}"
+
+  tasks:
+
+    - name: 🔍 Look up Azure Credential ID in AWX
+      uri:
+        url: "{{ awx_host }}/api/v2/credentials/?name={{ azure_credential_name }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ awx_token }}"
+        validate_certs: no
+      register: azure_cred
+
+    - name: Fail if credential not found
+      fail:
+        msg: "❌ Azure Credential '{{ azure_credential_name }}' does not exist!"
+      when: azure_cred.json.count == 0
+
+    - name: 🔧 Set credential for Azure API Access
+      set_fact:
+        subscription_id: "{{ Name }}"
+        client_id: "{{ client }}"
+        client_secret: "{{ secret }}"
+        tenant_id: "{{ tenant }}"
+
+    - name: 📦 Fetch Azure Virtual Machines
+      azure_rm_virtualmachine_info:
+        auth_source: auto
+        subscription_id: "{{ subscription_id }}"
+        client_id: "{{ client_id }}"
+        secret: "{{ client_secret }}"
+        tenant: "{{ tenant_id }}"
+      register: vm_output
+
+    - name: 📂 Save VM Details to JSON File
+      copy:
+        content: "{{ vm_output | to_nice_json }}"
+        dest: "./azure_vm_inventory.json"
+
+    - name: 📣 Print Summary
+      debug:
+        msg:
+          - "VM Count: {{ vm_output.virtualmachines | length }}"
+          - "Output stored at: ./azure_vm_inventory.json"
