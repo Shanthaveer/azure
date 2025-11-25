@@ -8,8 +8,8 @@
     # --------------------------
     # AWX / Tower Details
     # --------------------------
-    awx_host: "http://YOUR_AWX_HOST:8052"
-    awx_token: "YOUR_AWX_API_TOKEN"
+    awx_host: "http://172.17.0.1:8052"
+    awx_token: "dLzd4hXxJ7iOcdpkU0hZKK1ZN6reR0"
     azure_cred_type_name: "Microsoft Azure Resource Manager"
 
     # --------------------------
