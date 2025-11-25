@@ -26,6 +26,11 @@
     # --------------------------
     operation: "{{ operation_var | default('add_credential') }}"
 
+    # --------------------------
+    # Python path for working Azure CLI
+    # --------------------------
+    azure_python: "/usr/bin/python3.10"  # Replace with path to Python that can run azure-cli
+
   tasks:
 
     - name: 📌 Selected operation
@@ -139,16 +144,16 @@
 
         - name: Azure Login (Service Principal)
           shell: |
-            /usr/local/bin/az login --service-principal \
+            {{ azure_python }} -m azure.cli login --service-principal \
               --username {{ client_id }} \
               --password {{ client_secret }} \
               --tenant {{ tenant_id }}
 
         - name: Set Azure Subscription
-          shell: /usr/local/bin/az account set --subscription {{ subscription_id }}
+          shell: "{{ azure_python }} -m azure.cli account set --subscription {{ subscription_id }}"
 
         - name: Fetch VMs
-          shell: /usr/local/bin/az vm list --subscription {{ subscription_id }} --output json
+          shell: "{{ azure_python }} -m azure.cli vm list --subscription {{ subscription_id }} --output json"
           register: vm_list_raw
 
         - set_fact:
@@ -160,7 +165,7 @@
 
         - name: Fetch Details Per VM
           shell: |
-            /usr/local/bin/az vm show \
+            {{ azure_python }} -m azure.cli vm show \
               --resource-group {{ item.resourceGroup }} \
               --name {{ item.name }} \
               --show-details --output json
@@ -175,6 +180,6 @@
             var: vm_details
 
         - name: Logout Azure
-          shell: /usr/local/bin/az logout
+          shell: "{{ azure_python }} -m azure.cli logout"
 
       when: operation == "get_instances"
