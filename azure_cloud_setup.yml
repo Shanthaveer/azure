@@ -1,76 +1,81 @@
 ---
-- name: Azure Unified Operations (Add Credentials & Get Instances)
+- name: Azure Unified Operations (AWX Credential + VM Fetch)
   hosts: localhost
   connection: local
-  gather_facts: yes
+  gather_facts: no
 
   vars:
-    awx_host: "http://172.17.0.1:8052"
-    awx_token: "YOUR_AWX_TOKEN"
+    # --------------------------
+    # AWX / Tower Details
+    # --------------------------
+    awx_host: "http://YOUR_AWX_HOST:8052"
+    awx_token: "YOUR_AWX_API_TOKEN"
     azure_cred_type_name: "Microsoft Azure Resource Manager"
-    operation: "add_credential" # add_credential / get_instances
+
+    # --------------------------
+    # Azure Service Principal (Replace with your secure values)
+    # --------------------------
+    subscription_id: "YOUR_AZURE_SUBSCRIPTION_ID"
+    tenant_id: "YOUR_AZURE_TENANT_ID"
+    client_id: "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
+    client_secret: "YOUR_SERVICE_PRINCIPAL_CLIENT_SECRET"
+    organization: "YOUR_ORG_NAME"
+
+    # --------------------------
+    # Operation Mode: add_credential / get_instances
+    # --------------------------
+    operation: "add_credential"
 
   tasks:
 
     - name: 📌 Selected operation
       debug:
-        msg: "🔧 Running: {{ operation }}"
+        msg: "🔧 Running action: {{ operation }}"
 
     ##########################################################################
-    # OPERATION 1: CREATE OR UPDATE AZURE CREDENTIAL IN AWX
+    # 1) ADD OR UPDATE AZURE CREDENTIAL IN AWX
     ##########################################################################
     - block:
 
-        - name: 🔍 Show Credential Inputs
-          debug:
-            msg:
-              - "Subscription: {{ Name }}"
-              - "Client: {{ client }}"
-              - "Tenant: {{ tenant }}"
-              - "Organization: {{ organization }}"
-              - "Credential Name: Azure_{{ organization }}_{{ Name[:8] }}"
+        - name: Generate Credential Name
+          set_fact:
+            credential_name: "Azure_{{ organization }}_{{ subscription_id[:6] }}"
 
-        - set_fact:
-            credential_name: "Azure_{{ organization }}_{{ Name[:8] }}"
-
-        # --- Retrieve organization from AWX ---
-        - name: Get AWX Organization
+        - name: Fetch AWX Organization
           uri:
             url: "{{ awx_host }}/api/v2/organizations/?name={{ organization | urlencode }}"
             method: GET
             headers:
               Authorization: "Bearer {{ awx_token }}"
             validate_certs: no
-          register: org_response
+          register: org_lookup
 
-        - name: ❗ Validate organization exists
+        - name: Stop if Organization Not Found
           fail:
             msg: "❌ Organization '{{ organization }}' not found in AWX!"
-          when: org_response.json.results | length == 0
+          when: org_lookup.json.results | length == 0
 
         - set_fact:
-            org_id: "{{ org_response.json.results[0].id }}"
+            org_id: "{{ org_lookup.json.results[0].id }}"
 
-        # --- Retrieve credential type ---
-        - name: Get Azure Credential Type from AWX
+        - name: Get Azure Credential Type
           uri:
             url: "{{ awx_host }}/api/v2/credential_types/?name={{ azure_cred_type_name | urlencode }}"
             method: GET
             headers:
               Authorization: "Bearer {{ awx_token }}"
             validate_certs: no
-          register: cred_response
+          register: cred_type_lookup
 
-        - name: ❗ Validate credential type exists
+        - name: Validate Credential Type Found
           fail:
-            msg: "❌ Azure credential type not found!"
-          when: cred_response.json.results | length == 0
+            msg: "❌ Azure credential type missing in AWX!"
+          when: cred_type_lookup.json.results | length == 0
 
         - set_fact:
-            cred_type_id: "{{ cred_response.json.results[0].id }}"
+            cred_type_id: "{{ cred_type_lookup.json.results[0].id }}"
 
-        # --- Check if credential already exists ---
-        - name: Check if Azure credential already exists
+        - name: Check if Credential Exists
           uri:
             url: "{{ awx_host }}/api/v2/credentials/?name={{ credential_name | urlencode }}"
             method: GET
@@ -79,8 +84,7 @@
             validate_certs: no
           register: existing_cred
 
-        # --- Create new credential ---
-        - name: Create Azure Credential in AWX
+        - name: Create Credential
           uri:
             url: "{{ awx_host }}/api/v2/credentials/"
             method: POST
@@ -92,19 +96,18 @@
             status_code: [200,201]
             body:
               name: "{{ credential_name }}"
-              description: "Azure credential for {{ organization }}"
+              description: "Azure credential for automation"
               organization: "{{ org_id }}"
               credential_type: "{{ cred_type_id }}"
               inputs:
-                subscription: "{{ Name }}"
-                client: "{{ client }}"
-                secret: "{{ secret }}"
-                tenant: "{{ tenant }}"
+                subscription: "{{ subscription_id }}"
+                client: "{{ client_id }}"
+                secret: "{{ client_secret }}"
+                tenant: "{{ tenant_id }}"
           register: created_cred
           when: existing_cred.json.results | length == 0
 
-        # --- Update credential if exists ---
-        - name: Update existing Azure credential
+        - name: Update Credential
           uri:
             url: "{{ awx_host }}/api/v2/credentials/{{ existing_cred.json.results[0].id }}/"
             method: PATCH
@@ -115,68 +118,53 @@
             validate_certs: no
             status_code: [200,201]
             body:
-              description: "Updated Azure credential for {{ organization }}"
+              description: "Updated Azure credential for automation"
               inputs:
-                subscription: "{{ Name }}"
-                client: "{{ client }}"
-                secret: "{{ secret }}"
-                tenant: "{{ tenant }}"
-          register: updated_cred
+                subscription: "{{ subscription_id }}"
+                client: "{{ client_id }}"
+                secret: "{{ client_secret }}"
+                tenant: "{{ tenant_id }}"
           when: existing_cred.json.results | length > 0
 
-        - name: ✔ Summary
+        - name: ✔ Credential Summary
           debug:
-            msg:
-              - "🎉 Credential {{ 'created' if existing_cred.json.results | length == 0 else 'updated' }} successfully!"
-              - "Name: {{ credential_name }}"
-              - "Organization: {{ organization }}"
-              - "Credential ID: {{ created_cred.json.id | default(existing_cred.json.results[0].id) }}"
+            msg: "🎉 Azure credential task complete."
 
       when: operation == "add_credential"
 
     ##########################################################################
-    # OPERATION 2: FETCH VM DETAILS
+    # 2) GET VM INSTANCES FROM AZURE
     ##########################################################################
     - block:
-
-        - name: Show VM fetch input
-          debug:
-            msg:
-              - "Tenant: {{ tenant_id }}"
-              - "Subscription: {{ subscription_id }}"
-              - "Client: {{ client_id }}"
 
         - name: Azure Login (Service Principal)
           shell: |
             az login --service-principal \
-            --username {{ client_id }} \
-            --password {{ client_secret }} \
-            --tenant {{ tenant_id }}
-          register: az_login
-          no_log: false
-          ignore_errors: false
+              --username {{ client_id }} \
+              --password {{ client_secret }} \
+              --tenant {{ tenant_id }}
 
-        - name: Select Subscription
+        - name: Set Azure Subscription
           shell: az account set --subscription {{ subscription_id }}
 
-        - name: Fetch VM list
+        - name: Fetch VMs
           shell: az vm list --subscription {{ subscription_id }} --output json
           register: vm_list_raw
 
         - set_fact:
-            azure_vms: "{{ vm_list_raw.stdout | from_json }}"
+            azure_vm_list: "{{ vm_list_raw.stdout | from_json }}"
 
-        - debug:
-            msg: "Found {{ azure_vms | length }} VM(s)"
+        - name: Display VM Count
+          debug:
+            msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
 
-        - name: Fetch Details for each VM
+        - name: Fetch Details Per VM
           shell: |
             az vm show \
-            --resource-group {{ item.resourceGroup }} \
-            --name {{ item.name }} \
-            --show-details \
-            --output json
-          loop: "{{ azure_vms }}"
+              --resource-group {{ item.resourceGroup }} \
+              --name {{ item.name }} \
+              --show-details --output json
+          loop: "{{ azure_vm_list }}"
           register: vm_detail_raw
 
         - set_fact:
@@ -186,7 +174,7 @@
           debug:
             var: vm_details
 
-        - name: Logout from Azure
+        - name: Logout Azure
           shell: az logout
 
       when: operation == "get_instances"
