@@ -26,10 +26,7 @@
     # --------------------------
     operation: "{{ operation_var | default('add_credential') }}"
 
-    # --------------------------
-    # Python path for working Azure CLI
-    # --------------------------
-    azure_python: "#!/usr/bin/python3.6"  # Replace with path to Python that can run azure-cli
+    az_cmd: "/usr/local/bin/az"   # explicit az path
 
   tasks:
 
@@ -144,20 +141,31 @@
 
         - name: Azure Login (Service Principal)
           shell: |
-            {{ azure_python }} -m azure.cli login --service-principal \
+            {{ az_cmd }} login --service-principal \
               --username {{ client_id }} \
               --password {{ client_secret }} \
               --tenant {{ tenant_id }}
+          register: azure_login
+          failed_when: azure_login.rc != 0
+          changed_when: false
 
         - name: Set Azure Subscription
-          shell: "{{ azure_python }} -m azure.cli account set --subscription {{ subscription_id }}"
+          shell: "{{ az_cmd }} account set --subscription {{ subscription_id }}"
+          failed_when: azure_login.rc != 0
+          changed_when: false
 
         - name: Fetch VMs
-          shell: "{{ azure_python }} -m azure.cli vm list --subscription {{ subscription_id }} --output json"
+          shell: "{{ az_cmd }} vm list --subscription {{ subscription_id }} --output json"
           register: vm_list_raw
+          failed_when: vm_list_raw.rc != 0
 
-        - set_fact:
-            azure_vm_list: "{{ vm_list_raw.stdout | from_json }}"
+        - name: Debug VM list raw
+          debug:
+            var: vm_list_raw
+
+        - name: Parse VM list safely
+          set_fact:
+            azure_vm_list: "{{ (vm_list_raw.stdout | default('[]')) | from_json }}"
 
         - name: Display VM Count
           debug:
@@ -165,21 +173,24 @@
 
         - name: Fetch Details Per VM
           shell: |
-            {{ azure_python }} -m azure.cli vm show \
+            {{ az_cmd }} vm show \
               --resource-group {{ item.resourceGroup }} \
               --name {{ item.name }} \
               --show-details --output json
           loop: "{{ azure_vm_list }}"
           register: vm_detail_raw
+          when: azure_vm_list | length > 0
 
-        - set_fact:
-            vm_details: "{{ vm_detail_raw.results | map(attribute='stdout') | map('from_json') | list }}"
+        - name: Parse VM details safely
+          set_fact:
+            vm_details: "{{ (vm_detail_raw.results | map(attribute='stdout') | map('from_json') | list) | default([]) }}"
+          when: azure_vm_list | length > 0
 
         - name: Show VM Details
           debug:
             var: vm_details
 
         - name: Logout Azure
-          shell: "{{ azure_python }} -m azure.cli logout"
+          shell: "{{ az_cmd }} logout"
 
       when: operation == "get_instances"
