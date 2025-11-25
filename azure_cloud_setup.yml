@@ -138,30 +138,43 @@
     - block:
 
         - name: Azure Login (Service Principal)
-  shell: |
-    /usr/local/bin/az login --service-principal \
-      --username {{ client_id }} \
-      --password {{ client_secret }} \
-      --tenant {{ tenant_id }}
+          shell: |
+            /usr/local/bin/az login --service-principal \
+              --username {{ client_id }} \
+              --password {{ client_secret }} \
+              --tenant {{ tenant_id }}
 
-- name: Set Azure Subscription
-  shell: /usr/local/bin/az account set --subscription {{ subscription_id }}
+        - name: Set Azure Subscription
+          shell: /usr/local/bin/az account set --subscription {{ subscription_id }}
 
-- name: Fetch VMs
-  shell: /usr/local/bin/az vm list --subscription {{ subscription_id }} --output json
-  register: vm_list_raw
+        - name: Fetch VMs
+          shell: /usr/local/bin/az vm list --subscription {{ subscription_id }} --output json
+          register: vm_list_raw
 
-- name: Fetch Details Per VM
-  shell: |
-    /usr/local/bin/az vm show \
-      --resource-group {{ item.resourceGroup }} \
-      --name {{ item.name }} \
-      --show-details --output json
-  loop: "{{ azure_vm_list }}"
-  register: vm_detail_raw
+        - set_fact:
+            azure_vm_list: "{{ vm_list_raw.stdout | from_json }}"
 
-- name: Logout Azure
-  shell: /usr/local/bin/az logout
+        - name: Display VM Count
+          debug:
+            msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
 
+        - name: Fetch Details Per VM
+          shell: |
+            /usr/local/bin/az vm show \
+              --resource-group {{ item.resourceGroup }} \
+              --name {{ item.name }} \
+              --show-details --output json
+          loop: "{{ azure_vm_list }}"
+          register: vm_detail_raw
+
+        - set_fact:
+            vm_details: "{{ vm_detail_raw.results | map(attribute='stdout') | map('from_json') | list }}"
+
+        - name: Show VM Details
+          debug:
+            var: vm_details
+
+        - name: Logout Azure
+          shell: /usr/local/bin/az logout
 
       when: operation == "get_instances"
