@@ -9,7 +9,7 @@
     # AWX / Tower Details
     # --------------------------
     awx_host: "http://172.17.0.1:8052"
-    awx_token: "{{ awx_token_var }}"  # pass via AWX extra vars
+    awx_token: "{{ awx_token_var }}"
     azure_cred_type_name: "Microsoft Azure Resource Manager"
 
     # --------------------------
