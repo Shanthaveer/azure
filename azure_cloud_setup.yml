@@ -9,22 +9,22 @@
     # AWX / Tower Details
     # --------------------------
     awx_host: "http://172.17.0.1:8052"
-    awx_token: "dLzd4hXxJ7iOcdpkU0hZKK1ZN6reR0"
-    azure_cred_type_name: "Microsoft Azure Resource Manager-1"
+    awx_token: "{{ awx_token_var }}"  # pass via AWX extra vars
+    azure_cred_type_name: "Microsoft Azure Resource Manager"
 
     # --------------------------
-    # Azure Service Principal (Replace with your secure values)
+    # Azure Service Principal (pass securely via AWX extra vars)
     # --------------------------
-    subscription_id: "YOUR_AZURE_SUBSCRIPTION_ID"
-    tenant_id: "YOUR_AZURE_TENANT_ID"
-    client_id: "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
-    client_secret: "YOUR_SERVICE_PRINCIPAL_CLIENT_SECRET"
-    organization: "YOUR_ORG_NAME"
+    subscription_id: "{{ subscription_id_var }}"
+    tenant_id: "{{ tenant_id_var }}"
+    client_id: "{{ client_id_var }}"
+    client_secret: "{{ client_secret_var }}"
+    organization: "{{ organization_var }}"
 
     # --------------------------
     # Operation Mode: add_credential / get_instances
     # --------------------------
-    operation: "add_credential"
+    operation: "{{ operation_var | default('add_credential') }}"
 
   tasks:
 
@@ -137,33 +137,32 @@
     ##########################################################################
     - block:
 
-        - name: Azure Login (Service Principal)
+        - name: Fetch Azure VM details (single shell)
           shell: |
+            set -o errexit
             az login --service-principal \
               --username {{ client_id }} \
               --password {{ client_secret }} \
               --tenant {{ tenant_id }}
 
-        - name: Set Azure Subscription
-          shell: az account set --subscription {{ subscription_id }}
+            az account set --subscription {{ subscription_id }}
 
-        - name: Fetch VMs
-          shell: az vm list --subscription {{ subscription_id }} --output json
-          register: vm_list_raw
+            az vm list --subscription {{ subscription_id }} --output json
+          register: azure_vm_raw
+          changed_when: false
 
         - set_fact:
-            azure_vm_list: "{{ vm_list_raw.stdout | from_json }}"
+            azure_vm_list: "{{ azure_vm_raw.stdout | from_json }}"
 
-        - name: Display VM Count
+        - name: Show VM Count
           debug:
             msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
 
-        - name: Fetch Details Per VM
+        - name: Fetch VM details per VM
           shell: |
-            az vm show \
-              --resource-group {{ item.resourceGroup }} \
-              --name {{ item.name }} \
-              --show-details --output json
+            RG={{ item.resourceGroup }}
+            NAME={{ item.name }}
+            az vm show --resource-group $RG --name $NAME --show-details --output json
           loop: "{{ azure_vm_list }}"
           register: vm_detail_raw
 
