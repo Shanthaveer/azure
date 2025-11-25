@@ -26,7 +26,8 @@
     # --------------------------
     operation: "{{ operation_var | default('add_credential') }}"
 
-    az_cmd: "/usr/local/bin/az"   # explicit az path
+    # Use system Python directly to avoid AWX venv issues
+    az_cmd: "/usr/bin/python3 -m azure.cli"
 
   tasks:
 
@@ -151,7 +152,8 @@
 
         - name: Set Azure Subscription
           shell: "{{ az_cmd }} account set --subscription {{ subscription_id }}"
-          failed_when: azure_login.rc != 0
+          register: set_subscription
+          failed_when: set_subscription.rc != 0
           changed_when: false
 
         - name: Fetch VMs
@@ -192,5 +194,6 @@
 
         - name: Logout Azure
           shell: "{{ az_cmd }} logout"
+          ignore_errors: yes
 
       when: operation == "get_instances"
