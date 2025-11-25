@@ -137,43 +137,31 @@
     ##########################################################################
     - block:
 
-        - name: Fetch Azure VM details (single shell)
-          shell: |
-            set -o errexit
-            az login --service-principal \
-              --username {{ client_id }} \
-              --password {{ client_secret }} \
-              --tenant {{ tenant_id }}
+        - name: Azure Login (Service Principal)
+  shell: |
+    /usr/local/bin/az login --service-principal \
+      --username {{ client_id }} \
+      --password {{ client_secret }} \
+      --tenant {{ tenant_id }}
 
-            az account set --subscription {{ subscription_id }}
+- name: Set Azure Subscription
+  shell: /usr/local/bin/az account set --subscription {{ subscription_id }}
 
-            az vm list --subscription {{ subscription_id }} --output json
-          register: azure_vm_raw
-          changed_when: false
+- name: Fetch VMs
+  shell: /usr/local/bin/az vm list --subscription {{ subscription_id }} --output json
+  register: vm_list_raw
 
-        - set_fact:
-            azure_vm_list: "{{ azure_vm_raw.stdout | from_json }}"
+- name: Fetch Details Per VM
+  shell: |
+    /usr/local/bin/az vm show \
+      --resource-group {{ item.resourceGroup }} \
+      --name {{ item.name }} \
+      --show-details --output json
+  loop: "{{ azure_vm_list }}"
+  register: vm_detail_raw
 
-        - name: Show VM Count
-          debug:
-            msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
+- name: Logout Azure
+  shell: /usr/local/bin/az logout
 
-        - name: Fetch VM details per VM
-          shell: |
-            RG={{ item.resourceGroup }}
-            NAME={{ item.name }}
-            az vm show --resource-group $RG --name $NAME --show-details --output json
-          loop: "{{ azure_vm_list }}"
-          register: vm_detail_raw
-
-        - set_fact:
-            vm_details: "{{ vm_detail_raw.results | map(attribute='stdout') | map('from_json') | list }}"
-
-        - name: Show VM Details
-          debug:
-            var: vm_details
-
-        - name: Logout Azure
-          shell: az logout
 
       when: operation == "get_instances"
