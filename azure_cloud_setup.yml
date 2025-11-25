@@ -29,7 +29,7 @@
     # --------------------------
     # Python path for working Azure CLI
     # --------------------------
-    azure_python: "/usr/bin/python3.10"  # Replace with path to Python that can run azure-cli
+    azure_python: "#!/usr/bin/python3.6"  # Replace with path to Python that can run azure-cli
 
   tasks:
 
