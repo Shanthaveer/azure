@@ -26,9 +26,6 @@
     # --------------------------
     operation: "{{ operation_var | default('add_credential') }}"
 
-    # Use system Python directly to avoid AWX venv issues
-    az_cmd: "/usr/bin/python3 -m azure.cli"
-
   tasks:
 
     - name: 📌 Selected operation
@@ -142,22 +139,28 @@
 
         - name: Azure Login (Service Principal)
           shell: |
-            {{ az_cmd }} login --service-principal \
+            /usr/local/bin/az login --service-principal \
               --username {{ client_id }} \
-              --password {{ client_secret }} \
+              --password '{{ client_secret }}' \
               --tenant {{ tenant_id }}
+          environment:
+            PATH: "/usr/local/bin:/usr/bin:/bin"
           register: azure_login
           failed_when: azure_login.rc != 0
           changed_when: false
 
         - name: Set Azure Subscription
-          shell: "{{ az_cmd }} account set --subscription {{ subscription_id }}"
+          shell: "/usr/local/bin/az account set --subscription {{ subscription_id }}"
+          environment:
+            PATH: "/usr/local/bin:/usr/bin:/bin"
           register: set_subscription
           failed_when: set_subscription.rc != 0
           changed_when: false
 
         - name: Fetch VMs
-          shell: "{{ az_cmd }} vm list --subscription {{ subscription_id }} --output json"
+          shell: "/usr/local/bin/az vm list --subscription {{ subscription_id }} --output json"
+          environment:
+            PATH: "/usr/local/bin:/usr/bin:/bin"
           register: vm_list_raw
           failed_when: vm_list_raw.rc != 0
 
@@ -175,10 +178,12 @@
 
         - name: Fetch Details Per VM
           shell: |
-            {{ az_cmd }} vm show \
+            /usr/local/bin/az vm show \
               --resource-group {{ item.resourceGroup }} \
               --name {{ item.name }} \
               --show-details --output json
+          environment:
+            PATH: "/usr/local/bin:/usr/bin:/bin"
           loop: "{{ azure_vm_list }}"
           register: vm_detail_raw
           when: azure_vm_list | length > 0
@@ -193,7 +198,9 @@
             var: vm_details
 
         - name: Logout Azure
-          shell: "{{ az_cmd }} logout"
+          shell: "/usr/local/bin/az logout"
+          environment:
+            PATH: "/usr/local/bin:/usr/bin:/bin"
           ignore_errors: yes
 
       when: operation == "get_instances"
