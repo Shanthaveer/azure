@@ -63,7 +63,7 @@
 
     - name: Post VM details to Next.js API
       uri:
-        url: "{{ nextjs_instance_api }}"
+        url: "{{ url }}"
         method: POST
         body: "{{ vm_details | to_json }}"
         headers:
