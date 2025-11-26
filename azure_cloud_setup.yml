@@ -10,7 +10,7 @@
     client_id: "{{ client_id_var }}"
     client_secret: "{{ client_secret_var }}"
     operation: "{{ operation_var | default('get_instances') }}"
-    az_path: "/usr/local/bin/az"   # path to the fixed az
+    az_path: "/usr/bin/az"   # Correct Azure CLI path
 
   tasks:
     - name: 📌 Selected operation
@@ -24,24 +24,18 @@
             --username {{ client_id }}
             --password '{{ client_secret }}'
             --tenant {{ tenant_id }}
-          environment:
-            PATH: "/usr/local/bin:/usr/bin:/bin"
           register: azure_login
           failed_when: azure_login.rc != 0
           changed_when: false
 
         - name: Set Azure Subscription
           shell: "{{ az_path }} account set --subscription {{ subscription_id }}"
-          environment:
-            PATH: "/usr/local/bin:/usr/bin:/bin"
           register: set_subscription
           failed_when: set_subscription.rc != 0
           changed_when: false
 
         - name: Fetch VM list
           shell: "{{ az_path }} vm list --subscription {{ subscription_id }} --output json"
-          environment:
-            PATH: "/usr/local/bin:/usr/bin:/bin"
           register: vm_list_raw
           failed_when: vm_list_raw.rc != 0
 
@@ -53,21 +47,26 @@
           debug:
             msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
 
-        - name: Fetch Details Per VM
+        - name: Fetch per-VM details
           shell: >
             {{ az_path }} vm show
             --resource-group {{ item.resourceGroup }}
             --name {{ item.name }}
             --show-details --output json
-          environment:
-            PATH: "/usr/local/bin:/usr/bin:/bin"
           loop: "{{ azure_vm_list }}"
           register: vm_detail_raw
           when: azure_vm_list | length > 0
 
-        - name: Parse VM details safely
+        - name: Parse VM details list
           set_fact:
-            vm_details: "{{ (vm_detail_raw.results | map(attribute='stdout') | map('from_json') | list) | default([]) }}"
+            vm_details: >-
+              {{
+                vm_detail_raw.results
+                | selectattr('stdout', 'defined')
+                | map(attribute='stdout')
+                | map('from_json')
+                | list
+              }}
           when: azure_vm_list | length > 0
 
         - name: Show VM details
@@ -76,8 +75,6 @@
 
         - name: Logout Azure
           shell: "{{ az_path }} logout"
-          environment:
-            PATH: "/usr/local/bin:/usr/bin:/bin"
           ignore_errors: yes
 
       when: operation == "get_instances"
