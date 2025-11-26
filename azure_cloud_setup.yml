@@ -6,8 +6,7 @@
 
   vars:
     az_path: "/usr/bin/az"   # working Azure CLI
-    nextjs_instance_api: "http://localhost:3000/api/saveInstanceDetails" # your API route
-
+    url: "http://172.17.0.1:3000/api/saveInstanceDetails"
   tasks:
     - name: Azure Login using Service Principal
       shell: >
