@@ -1,80 +1,20 @@
 ---
-- name: Azure Unified Operations (AWX Credential + VM Fetch)
+- name: Azure Login Only
   hosts: localhost
   connection: local
   gather_facts: no
 
-  vars:
-    subscription_id: "{{ subscription_id_var }}"
-    tenant_id: "{{ tenant_id_var }}"
-    client_id: "{{ client_id_var }}"
-    client_secret: "{{ client_secret_var }}"
-    operation: "{{ operation_var | default('get_instances') }}"
-    az_path: "/usr/bin/az"   # Correct Azure CLI path
-
   tasks:
-    - name: 📌 Selected operation
+    - name: Azure Login using Service Principal (exact CLI command)
+      shell: >
+        /usr/local/bin/az login --service-principal
+        --username "{{ client_id_var }}"
+        --password "{{ client_secret_var }}"
+        --tenant "{{ tenant_id_var }}"
+      environment:
+        PATH: "/usr/local/bin:/usr/bin:/bin"
+      register: login_output
+
+    - name: Show login result
       debug:
-        msg: "🔧 Running action: {{ operation }}"
-
-    - block:
-        - name: Azure Login (Service Principal)
-          shell: >
-            {{ az_path }} login --service-principal
-            --username {{ client_id }}
-            --password '{{ client_secret }}'
-            --tenant {{ tenant_id }}
-          register: azure_login
-          failed_when: azure_login.rc != 0
-          changed_when: false
-
-        - name: Set Azure Subscription
-          shell: "{{ az_path }} account set --subscription {{ subscription_id }}"
-          register: set_subscription
-          failed_when: set_subscription.rc != 0
-          changed_when: false
-
-        - name: Fetch VM list
-          shell: "{{ az_path }} vm list --subscription {{ subscription_id }} --output json"
-          register: vm_list_raw
-          failed_when: vm_list_raw.rc != 0
-
-        - name: Parse VM list safely
-          set_fact:
-            azure_vm_list: "{{ (vm_list_raw.stdout | default('[]')) | from_json }}"
-
-        - name: Display VM count
-          debug:
-            msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
-
-        - name: Fetch per-VM details
-          shell: >
-            {{ az_path }} vm show
-            --resource-group {{ item.resourceGroup }}
-            --name {{ item.name }}
-            --show-details --output json
-          loop: "{{ azure_vm_list }}"
-          register: vm_detail_raw
-          when: azure_vm_list | length > 0
-
-        - name: Parse VM details list
-          set_fact:
-            vm_details: >-
-              {{
-                vm_detail_raw.results
-                | selectattr('stdout', 'defined')
-                | map(attribute='stdout')
-                | map('from_json')
-                | list
-              }}
-          when: azure_vm_list | length > 0
-
-        - name: Show VM details
-          debug:
-            var: vm_details
-
-        - name: Logout Azure
-          shell: "{{ az_path }} logout"
-          ignore_errors: yes
-
-      when: operation == "get_instances"
+        var: login_output.stdout
