@@ -1,11 +1,12 @@
 ---
-- name: Azure Login and Fetch VMs
+- name: Azure Login and Fetch VMs + Send to Next.js API
   hosts: localhost
   connection: local
   gather_facts: no
 
   vars:
-    az_path: "/usr/bin/az"  # the working path confirmed manually
+    az_path: "/usr/bin/az"   # working Azure CLI
+    nextjs_instance_api: "http://localhost:3000/api/saveInstanceDetails" # your API route
 
   tasks:
     - name: Azure Login using Service Principal
@@ -16,19 +17,16 @@
         --tenant "{{ tenant_id_var }}"
       environment:
         PATH: "/usr/bin:/usr/local/bin:/bin"
-      register: login_output
+      register: azure_login
+      failed_when: azure_login.rc != 0
       changed_when: false
-
-    - name: Show login result
-      debug:
-        var: login_output.stdout
 
     - name: Set Azure Subscription
       shell: "{{ az_path }} account set --subscription {{ subscription_id_var }}"
       environment:
         PATH: "/usr/bin:/usr/local/bin:/bin"
-      register: subscription_set
-      failed_when: subscription_set.rc != 0
+      register: set_subscription
+      failed_when: set_subscription.rc != 0
       changed_when: false
 
     - name: Fetch VM list
@@ -42,10 +40,6 @@
       set_fact:
         azure_vm_list: "{{ (vm_list_raw.stdout | default('[]')) | from_json }}"
 
-    - name: Display VM count
-      debug:
-        msg: "Found {{ azure_vm_list | length }} Azure VM(s)."
-
     - name: Fetch VM Details
       shell: >
         {{ az_path }} vm show
@@ -56,17 +50,27 @@
       environment:
         PATH: "/usr/bin:/usr/local/bin:/bin"
       loop: "{{ azure_vm_list }}"
-      register: vm_details_raw
+      register: vm_detail_raw
       when: azure_vm_list | length > 0
 
     - name: Parse VM details safely
       set_fact:
-        vm_details: "{{ (vm_details_raw.results | map(attribute='stdout') | map('from_json') | list) | default([]) }}"
+        vm_details: "{{ (vm_detail_raw.results | map(attribute='stdout') | map('from_json') | list) | default([]) }}"
       when: azure_vm_list | length > 0
 
     - name: Show VM details
       debug:
         var: vm_details
+
+    - name: Post VM details to Next.js API
+      uri:
+        url: "{{ nextjs_instance_api }}"
+        method: POST
+        body: "{{ vm_details | to_json }}"
+        headers:
+          Content-Type: "application/json"
+        status_code: [200,201]
+      when: azure_vm_list | length > 0
 
     - name: Logout Azure
       shell: "{{ az_path }} logout"
