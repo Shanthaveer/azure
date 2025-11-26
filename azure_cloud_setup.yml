@@ -7,12 +7,12 @@
   tasks:
     - name: Azure Login using Service Principal (exact CLI command)
       shell: >
-        /usr/local/bin/az login --service-principal
+        /usr/bin/az login --service-principal
         --username "{{ client_id_var }}"
         --password "{{ client_secret_var }}"
         --tenant "{{ tenant_id_var }}"
       environment:
-        PATH: "/usr/local/bin:/usr/bin:/bin"
+        PATH: "/usr/bin:/usr/local/bin:/bin"
       register: login_output
 
     - name: Show login result
